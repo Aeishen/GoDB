@@ -5,16 +5,19 @@ package main
 
 import (
 	"database/sql"
+	"encoding/json"
 	"fmt"
 	_ "github.com/go-sql-driver/mysql"
 	"log"
+	"net/http"
+	"strconv"
 	"time"
 )
 
 //数据库连接信息
 const (
 	USERNAME = "root"
-	PASSWORD = "123456"
+	PASSWORD = "301070"
 	NETWORK = "tcp"
 	SERVER = "127.0.0.1"
 	PORT = 3306
@@ -29,22 +32,50 @@ type User struct {
 	CreateTime int64 `json:"createTime" form:"createTime"`
 }
 
+var DB *sql.DB
+
+func AddHandler(w http.ResponseWriter, r *http.Request)  {
+	querys := r.URL.Query()
+	ids := querys.Get("id")
+	id ,_ := strconv.Atoi(ids)
+	data := TestQueryHttp(DB, id)
+    d,e := json.Marshal(data)
+    if e != nil{
+    	fmt.Fprintln(w,http.StatusNotFound)
+		return
+	}
+	fmt.Fprintln(w,string(d))
+    return
+}
+
 func main() {
+	var err error
 	conn := fmt.Sprintf("%s:%s@%s(%s:%d)/%s",USERNAME,PASSWORD,NETWORK,SERVER,PORT,DATABASE)
-	DB, err := sql.Open("mysql", conn)
+	DB, err = sql.Open("mysql", conn)
 	if err != nil{
 		log.Fatalf("connection to mysql failed:%v\n", err)
 		return
 	}
+	defer DB.Close()
 	DB.SetConnMaxLifetime(100 * time.Second)  //最大连接周期，超时的连接就close
 	DB.SetMaxOpenConns(100)                //设置最大连接数
-	CreateTable(DB)
-	id1 := InsertData(DB, "Aeishen","301070")
-	_ = InsertData(DB, "May","111111")
-	QueryOne(DB,id1)
-	QueryMulti(DB, id1)
-	UpdateData(DB,"AeishenLin", id1)
-	DeleteDate(DB, id1)
+	//CreateTable(DB)
+	//id1 := InsertData(DB, "Aeishen","301070")
+	//_ = InsertData(DB, "May","111111")
+	//QueryOne(DB,id1)
+	//QueryMulti(DB, id1)
+	//UpdateData(DB,"AeishenLin", id1)
+	//DeleteDate(DB, id1)
+
+	InsertData(DB, "Aeishen","301070")
+	InsertData(DB, "Tom","222222")
+
+	http.HandleFunc("/", AddHandler)
+	err = http.ListenAndServe("127.0.0.1:8080", nil)
+	if err != nil {
+		fmt.Printf("http.ListenAndServe()函数执行错误,错误为:%v\n", err)
+		return
+	}
 }
 
 func CreateTable(DB *sql.DB)  {
@@ -170,4 +201,22 @@ func DeleteDate(DB *sql.DB, id int)  {
 	log.Println("Affected rows:", rowsAffected)
 }
 
+
+//查询单行
+func TestQueryHttp(DB *sql.DB, id int)  *User{
+	newUser := new(User)
+
+	//sqlInfo := "select id,username,password from users where username=? and password=? and status=?"
+	//row := DB.QueryRow(sqlInfo,name,pass,1)
+	sqlInfo := "select id,username,password from users where id=?"
+	row := DB.QueryRow(sqlInfo,id)
+	//row.scan中的字段必须是按照数据库存入字段的顺序，否则报错
+	err := row.Scan(&newUser.Id,&newUser.Username,&newUser.Password)
+	if err != nil{
+		log.Fatalf("scan failed:%v\n", err)
+		return nil
+	}
+	log.Printf("TestQueryHttp  data: %v\n", newUser)
+	return newUser
+}
 
